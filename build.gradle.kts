@@ -6,8 +6,18 @@ import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 
+buildscript {
+
+    repositories {
+        gradleScriptKotlin()
+    }
+
+    dependencies {
+        classpath(kotlinModule("gradle-plugin"))
+    }
+}
+
 plugins {
-    kotlin("jvm")
     id("org.jetbrains.kotlin.plugin.allopen") version "1.1.2"
     id("org.jetbrains.kotlin.plugin.noarg") version "1.1.2"
     id("com.bmuschko.docker-remote-api") version "3.0.7"
@@ -54,8 +64,8 @@ tasks {
         }
 
         onError2 { exception: Exception ->
-            println(ex.javaClass)
-            println(ex.message)
+            println(exception.javaClass)
+            println(exception.message)
         }
     }
 
@@ -135,7 +145,7 @@ noArg {
 }
 
 dependencies {
-    compile(kotlin("stdlib"))
+    compile(kotlinModule("stdlib"))
     compile("com.fasterxml.jackson.core:jackson-databind:${extra["jackson_version"]}")
     compile("com.fasterxml.jackson.module:jackson-module-kotlin:${extra["jackson_version"]}")
     compile("org.jetbrains.kotlin:kotlin-reflect:${extra["kotlin_version"]}") // must be "compile" for conflict resolution
