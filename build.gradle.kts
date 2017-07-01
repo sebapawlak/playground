@@ -68,7 +68,7 @@ fun DockerExistingContainer.containerIdFromFile(file: File) {
 
 fun DockerRemoveImage.imageIdFromFile(file: File) {
     if (file.exists()) {
-        targetImageId(NoArgClosure { readContainerId() })
+        targetImageId(NoArgClosure { readImageId() })
         force = true
     } else {
         enabled = false
@@ -127,6 +127,8 @@ tasks {
         targetImageId {
             buildImage.imageId
         }
+
+        portBindings = listOf("8080:8080")
 
         doLast {
             dockerContainerIdFile.printWriter().use { out -> out.println(containerId) }
