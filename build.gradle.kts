@@ -1,19 +1,15 @@
 import com.bmuschko.gradle.docker.tasks.AbstractReactiveStreamsTask
-import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerRemoveContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
-import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
+import com.bmuschko.gradle.docker.tasks.container.*
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerRemoveImage
 
 buildscript {
-
     repositories {
         gradleScriptKotlin()
     }
 
     dependencies {
-        classpath(kotlinModule("gradle-plugin"))
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${extra["kotlin_version"]}")
     }
 }
 
@@ -38,16 +34,45 @@ val dockerContainerIdFile: File = File("$buildDir/containerId")
 fun readImageId(): String = dockerImageIdFile.readText().trim()
 fun readContainerId(): String = dockerContainerIdFile.readText().trim()
 
-open class NoArgKotlinClosure<V: Any>(
+open class ExceptionClosure<V: Any>(
         val function: (Exception) -> V?
 ) : groovy.lang.Closure<V?>(null, null) {
 
-    @Suppress("unused")
     fun doCall(ex: Exception): V? = function(ex)
 }
 
+open class NoArgClosure<V: Any>(
+        val function: () -> V?
+) : groovy.lang.Closure<V?>(null, null) {
+
+    fun doCall(): V? = function()
+}
+
 fun AbstractReactiveStreamsTask.onError2(onErrorAction: (Exception) -> Unit) {
-    onError = NoArgKotlinClosure(onErrorAction)
+    onError = ExceptionClosure(onErrorAction)
+}
+
+fun DockerExistingContainer.targetContainerId(containerIdSupplier: () -> String) =
+        targetContainerId(NoArgClosure(containerIdSupplier))
+
+fun DockerCreateContainer.targetImageId(imageIdSupplier : () -> String) =
+        targetImageId(NoArgClosure(imageIdSupplier))
+
+fun DockerExistingContainer.containerIdFromFile(file: File) {
+    if (file.exists()) {
+        targetContainerId(NoArgClosure { readContainerId() })
+    } else {
+        enabled = false
+    }
+}
+
+fun DockerRemoveImage.imageIdFromFile(file: File) {
+    if (file.exists()) {
+        targetImageId(NoArgClosure { readContainerId() })
+        force = true
+    } else {
+        enabled = false
+    }
 }
 
 tasks {
@@ -57,11 +82,7 @@ tasks {
     }
 
     val stopContainer = "stopContainer"(DockerStopContainer::class) {
-        if (dockerContainerIdFile.exists()) {
-            containerId = readContainerId()
-        } else {
-            enabled = false
-        }
+        containerIdFromFile(dockerContainerIdFile)
 
         onError2 { exception: Exception ->
             println(exception.javaClass)
@@ -72,11 +93,7 @@ tasks {
     val removeContainer = "removeContainer"(DockerRemoveContainer::class) {
         dependsOn(stopContainer)
 
-        if (dockerContainerIdFile.exists()) {
-            containerId = readContainerId()
-        } else {
-            enabled = false;
-        }
+        containerIdFromFile(dockerContainerIdFile)
 
         doLast {
             dockerContainerIdFile.delete()
@@ -86,12 +103,7 @@ tasks {
     val removeImage =  "removeImage"(DockerRemoveImage::class) {
         dependsOn(removeContainer)
 
-        if (dockerImageIdFile.exists()) {
-            imageId = readImageId()
-            force = true
-        } else {
-            enabled = false
-        }
+        imageIdFromFile(dockerImageIdFile)
 
         doLast {
             dockerImageIdFile.delete()
@@ -112,10 +124,8 @@ tasks {
     val createContainer = "createContainer"(DockerCreateContainer::class) {
         dependsOn(buildImage)
 
-        imageId = "empty"
-
-        doFirst {
-            imageId = buildImage.imageId
+        targetImageId {
+            buildImage.imageId
         }
 
         doLast {
@@ -126,10 +136,8 @@ tasks {
     val startContainer = "startContainer"(DockerStartContainer::class) {
         dependsOn(createContainer)
 
-        containerId = "empty"
-
-        doFirst {
-            containerId = createContainer.containerId
+        targetContainerId {
+            createContainer.containerId
         }
     }
 }
@@ -145,7 +153,6 @@ noArg {
 }
 
 dependencies {
-    compile(kotlinModule("stdlib"))
     compile("com.fasterxml.jackson.core:jackson-databind:${extra["jackson_version"]}")
     compile("com.fasterxml.jackson.module:jackson-module-kotlin:${extra["jackson_version"]}")
     compile("org.jetbrains.kotlin:kotlin-reflect:${extra["kotlin_version"]}") // must be "compile" for conflict resolution
